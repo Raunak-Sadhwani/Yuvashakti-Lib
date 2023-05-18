@@ -1,4 +1,3 @@
-flask-mysqldb
+flask_mysqldb
 python-dotenv
-flask-mail
-mysql-connector-python
+flask_mail
