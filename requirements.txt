@@ -2,3 +2,4 @@ flask-mysqldb
 python-dotenv
 flask-mail
 mysqlclient
+mysql-connector-python
