@@ -11,8 +11,8 @@ app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 465
 app.config['MAIL_USE_SSL'] = True
 app.config['MAIL_USERNAME'] = 'sarveshsutar1000@gmail.com'
-app.config['MAIL_PASSWORD'] = env_vars.get('MAIL_PASSWORD')
-app.secret_key = env_vars.get('SECRET_KEY')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
+app.secret_key = os.getenv('SECRET_KEY')
 
 
 mail = Mail(app)
