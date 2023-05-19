@@ -16,12 +16,11 @@ app.secret_key = env_vars.get('SECRET_KEY')
 
 
 mail = Mail(app)
-password = env_vars.get('DB_PASSWORD')
 
 conn = pymysql.connect(
     host='sql.freedb.tech',
     user='freedb_yuvashakti',
-    password=password,
+    password='Y8R4fk@rbGPV94t',
     database='freedb_yuvashakti'
 )
 
