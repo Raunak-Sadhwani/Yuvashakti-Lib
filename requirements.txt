@@ -1,6 +1,3 @@
-pip>=23.1.2
-setuptools
-mysqlclient==2.1.1
-flask_mysqldb
-python-dotenv
-flask_mail
+Jinja2==2.11.3
+pymysql
+Flask==1.1.2
