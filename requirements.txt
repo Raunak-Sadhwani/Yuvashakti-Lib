@@ -1,3 +1,5 @@
+--upgrade-pip
+--upgrade python
 flask_mysqldb
 python-dotenv
 flask_mail
