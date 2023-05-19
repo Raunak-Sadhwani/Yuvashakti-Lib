@@ -1,27 +1,28 @@
 from datetime import datetime, timedelta
 from flask_mail import Mail, Message
 from flask import Flask, flash, jsonify,  redirect, render_template, request, session, url_for
-from flask_mysqldb import MySQL
-from dotenv import load_dotenv
-import os
+import pymysql
+from dotenv import dotenv_values
 
-
+env_vars = dotenv_values()
 app = Flask(__name__, static_url_path='/static')
-app.config['MYSQL_HOST'] = 'sql.freedb.tech'
-app.config['MYSQL_USER'] = 'freedb_yuvashakti'
-app.config['MYSQL_PASSWORD'] = os.getenv('MYSQL_PASSWORD')
-app.config['MYSQL_DB'] = 'freedb_yuvashakti'
-app.config['MYSQL_PORT'] = 3306
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 465
 app.config['MAIL_USE_SSL'] = True
 app.config['MAIL_USERNAME'] = 'sarveshsutar1000@gmail.com'
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
-app.secret_key = os.getenv('SECRET_KEY')
+app.config['MAIL_PASSWORD'] = env_vars.get('MAIL_PASSWORD')
+app.secret_key = env_vars.get('SECRET_KEY')
 
 
 mail = Mail(app)
-mysql = MySQL(app)
+password = env_vars.get('DB_PASSWORD')
+
+conn = pymysql.connect(
+    host='sql.freedb.tech',
+    user='freedb_yuvashakti',
+    password=password,
+    database='freedb_yuvashakti'
+)
 
 
 @app.route('/',  methods=['GET'])
@@ -62,12 +63,12 @@ def register():
         Username = request.form['Username']
         Email = request.form['Email']
         Password = request.form['Password']
-        cur = mysql.connection.cursor()
+        cur = conn.cursor()
 
         # check if username or email already exists
         cur.execute(
             "SELECT * FROM users WHERE Username = %s OR Email = %s", (Username, Email))
-        mysql.connection.commit()
+        conn.commit()
         user = cur.fetchone()
 
         if user:
@@ -75,13 +76,13 @@ def register():
 
         cur.execute("INSERT INTO users (FullName,Username, Email, Password) VALUES (%s, %s, %s, %s)",
                     (FullName, Username, Email, Password))
-        mysql.connection.commit()
+        conn.commit()
         user_id = cur.lastrowid
 
         # insert into activity table
         cur.execute("INSERT INTO activity (username, reg_date) VALUES (%s, %s)",
                     (Username, datetime.now()))
-        mysql.connection.commit()
+        conn.commit()
         cur.close()
 
         # save username in session
@@ -104,10 +105,10 @@ def login():
     if request.method == 'POST':
         Username = request.form['Username']
         Password = request.form['Password']
-        cur = mysql.connection.cursor()
+        cur = conn.cursor()
         cur.execute(
             "SELECT * FROM users WHERE Username = %s AND Password = %s", (Username, Password))
-        mysql.connection.commit()
+        conn.commit()
         user = cur.fetchone()
         if user:
             # save username in session
@@ -117,7 +118,7 @@ def login():
             # insert into activity table
             cur.execute("INSERT INTO activity (username, last_login) VALUES (%s, %s)",
                         (user[2], datetime.now()))
-            mysql.connection.commit()
+            conn.commit()
             cur.close()
 
             return redirect(url_for('books'))
@@ -134,10 +135,10 @@ def gallery():
 @app.route('/logout', methods=['GET'])
 def logout():
     if 'admin' not in session:
-        cur = mysql.connection.cursor()
+        cur = conn.cursor()
         cur.execute("INSERT INTO activity (username, logout) VALUES (%s, %s)",
                     (session['username'], datetime.now()))
-        mysql.connection.commit()
+        conn.commit()
         cur.close()
     session.pop('username', None)
     session.pop('user_id', None)
@@ -151,10 +152,10 @@ def books():
     if 'username' not in session:
         return redirect(url_for('login'))
 
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     books = []
     cursor.execute("SELECT * FROM books")
-    mysql.connection.commit()
+    conn.commit()
     result = cursor.fetchall()
     books = []
     for row in result:
@@ -182,12 +183,12 @@ def borrows():
     if 'admin' not in session:
         return redirect(url_for('admin'))
 
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     borrows = []
     # get all from user_books table where submitted_date is null
     cursor.execute(
         "SELECT ub.user_id, ub.book_id, ub.borrow_date, ub.return_date, b.name, b.publisher, b.category, b.author, u.fullname FROM user_books ub JOIN books b ON ub.book_id=b.book_id JOIN users u ON ub.user_id=u.id WHERE ub.submitted_date IS NULL")
-    mysql.connection.commit()
+    conn.commit()
     result = cursor.fetchall()
     borrows = []
     for row in result:
@@ -213,12 +214,12 @@ def returns():
     if 'admin' not in session:
         return redirect(url_for('admin'))
 
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     borrows = []
     # get all from user_books table where submitted_date is null
     cursor.execute(
         "SELECT ub.user_id, ub.book_id, ub.borrow_date, ub.return_date, ub.submitted_date, b.name, b.publisher, b.category, b.author, u.fullname FROM user_books ub JOIN books b ON ub.book_id=b.book_id JOIN users u ON ub.user_id=u.id WHERE ub.submitted_date IS NOT NULL")
-    mysql.connection.commit()
+    conn.commit()
     result = cursor.fetchall()
     borrows = []
     for row in result:
@@ -245,12 +246,12 @@ def my_books():
     if 'username' not in session:
         return redirect(url_for('login'))
 
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     books = []
     # select every book of that user id FROM user_books table
     user_id = session['user_id']
     cursor.execute("SELECT b.publisher, b.name, b.book_id, b.category, b.author, ub.borrow_date, ub.return_date, ub.submitted_date FROM user_books ub JOIN books b ON ub.book_id=b.book_id WHERE ub.user_id= % s", (user_id,))
-    mysql.connection.commit()
+    conn.commit()
     result = cursor.fetchall()
     books = []
     for index, row in enumerate(result):
@@ -275,11 +276,11 @@ def borrow_books(id):
         return redirect(url_for('admin'))
 
     user_id = id
-    cur = mysql.connection.cursor()
+    cur = conn.cursor()
 
     # fetch full name of user
     cur.execute("SELECT FullName FROM users WHERE id = %s", (user_id,))
-    mysql.connection.commit()
+    conn.commit()
     user_name = cur.fetchone()[0]
 
     # fetch books with copies available
@@ -310,7 +311,7 @@ def borrow_books(id):
 @app.route('/borrow/<int:id>', methods=['POST'])
 def borrow(id):
     books = request.form
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     user_id = id
     borrow_date = datetime.now()
     return_date = (datetime.now() +
@@ -318,43 +319,43 @@ def borrow(id):
     for book_id in books:
         cursor.execute("INSERT INTO user_books (user_id, book_id, borrow_date, return_date) VALUES (%s, %s, %s, %s)",
                        (user_id, book_id, borrow_date, return_date))
-        mysql.connection.commit()
+        conn.commit()
 
         # get username of the user
         cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
-        mysql.connection.commit()
+        conn.commit()
         username = cursor.fetchone()[0]
 
         # get book name of the book
         cursor.execute("SELECT name FROM books WHERE book_id = %s", (book_id,))
-        mysql.connection.commit()
+        conn.commit()
         book_name = cursor.fetchone()[0]
 
         cursor.execute("INSERT INTO activity (username, book_name, borrow_date) VALUES (%s, %s, %s)",
                        (username, book_name, borrow_date))
-        mysql.connection.commit()
+        conn.commit()
 
         # update the copies_available field in the books table by increasing it by 1
         cursor.execute(
             "UPDATE books SET copies_available = copies_available - 1 WHERE book_id = %s", (book_id,))
-        mysql.connection.commit()
+        conn.commit()
 
         # check if quantity is 0, if yes, update the status to 'Unavailable'
         cursor.execute(
             "SELECT copies_available FROM books WHERE book_id = %s", (book_id,))
-        mysql.connection.commit()
+        conn.commit()
         copies_available = cursor.fetchone()[0]
         if copies_available == 0:
             cursor.execute(
                 "UPDATE books SET status = 'Unavailable' WHERE book_id = %s", (book_id,))
-            mysql.connection.commit()
+            conn.commit()
     response_data = {'message': 'Books borrowed'}
     return jsonify(response_data), 200
 
 
 @app.route('/return', methods=['POST'])
 def return_book():
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     # get the book_id from the request data
     book_id = request.form['book_id']
     user_id = request.form['user_id']
@@ -367,37 +368,37 @@ def return_book():
 
     # add the activity to the activity table
     cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
-    mysql.connection.commit()
+    conn.commit()
     username = cursor.fetchone()[0]
 
     # get book name of the book
     cursor.execute("SELECT name FROM books WHERE book_id = %s", (book_id,))
-    mysql.connection.commit()
+    conn.commit()
     book_name = cursor.fetchone()[0]
 
     cursor.execute("INSERT INTO activity (username, book_name, return_date) VALUES (%s, %s, %s)",
                    (username, book_name, date))
-    mysql.connection.commit()
+    conn.commit()
 
     # execute the update query
     cursor.execute(update_query, (date, book_id, user_id))
-    mysql.connection.commit()
+    conn.commit()
 
     # update the copies_available field in the books table by increasing it by 1
     cursor.execute(
         "UPDATE books SET copies_available = copies_available + 1 WHERE book_id = %s", (book_id,))
 
-    mysql.connection.commit()
+    conn.commit()
 
     # check if quantity is 1, if yes, update the status to 'Available'
     cursor.execute(
         "SELECT * FROM books WHERE book_id = %s AND copies_available = 1", (book_id,))
-    mysql.connection.commit()
+    conn.commit()
     result = cursor.fetchone()
     if result:
         cursor.execute(
             "UPDATE books SET status = 'Available' WHERE book_id = %s", (book_id,))
-        mysql.connection.commit()
+        conn.commit()
 
     return 'Book returned successfully!'
 
@@ -412,11 +413,11 @@ def login_admin():
     Username = request.form['Username']
     Password = request.form['Password']
 
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM admin WHERE Username = %s AND Password = %s", (Username, Password))
     result = cursor.fetchone()
-    mysql.connection.commit()
+    conn.commit()
     cursor.close()
 
     if result:
@@ -432,7 +433,7 @@ def dash():
     if 'admin' not in session:
         return redirect(url_for('admin'))
 
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     cursor.execute(
         'SELECT * FROM activity ORDER BY id DESC LIMIT 15 OFFSET 0;')
     activity_data = cursor.fetchall()
@@ -480,11 +481,11 @@ def addbook():
         price = request.form['price']
         status = request.form['status']
         added_on = request.form['added_on']
-        cur = mysql.connection.cursor()
+        cur = conn.cursor()
         try:
             cur.execute("INSERT INTO books (book_id, name, category, author, publisher, copies_available, price, status, added_on) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                         (book_id, name, category, author, publisher, copies_available, price, status, added_on))
-            mysql.connection.commit()
+            conn.commit()
             flash("Book added successfully!")
             return redirect(url_for('addbook'))
         except:
@@ -502,9 +503,9 @@ def users():
     if 'admin' not in session:
         return redirect(url_for('admin'))
 
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     cursor.execute("SELECT * FROM users")
-    mysql.connection.commit()
+    conn.commit()
     result = cursor.fetchall()
     users = []
     for row in result:
@@ -524,7 +525,7 @@ def users():
 def user_details(id):
     if 'admin' not in session:
         return redirect(url_for('admin'))
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
    # query to get the user details
     query = """
     SELECT users.FullName, users.email, user_books.user_id, books.book_id, user_books.borrow_date, user_books.return_date, books.name, user_books.submitted_date
@@ -560,7 +561,7 @@ def user_details(id):
 def book_details(id):
     if 'admin' not in session:
         return redirect(url_for('admin'))
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     # query to get the user details
     query = "SELECT * FROM user_books WHERE book_id = %s"
     cursor.execute(query, (id,))
@@ -612,7 +613,7 @@ def reports():
         to_date = request.args.get('to_date')
         # desired data - user_count, book_count, books_borrowed_count, books_returned_count, copies_count, activity_count
         # where date is between from_date and to_date
-        cursor = mysql.connection.cursor()
+        cursor = conn.cursor()
         # first query to get the user_count
         query = "SELECT COUNT(*) FROM users WHERE reg_on BETWEEN %s AND %s"
         cursor.execute(query, (from_date, to_date))
@@ -625,12 +626,12 @@ def reports():
         users = []
         for row in result:
             user = {
-            'id': row[0],
-            'name': row[1],
-            'username': row[2],
-            'email': row[3],
-            'reg_on': row[5],
-        }
+                'id': row[0],
+                'name': row[1],
+                'username': row[2],
+                'email': row[3],
+                'reg_on': row[5],
+            }
             users.append(user)
 
         # second query to get the book_count
@@ -644,15 +645,15 @@ def reports():
         books = []
         for row in result:
             book = {
-            'name': row[1],
-            'publisher': row[2],
-            'book_id': row[3],
-            'category': row[4],
-            'author': row[5],
-            'copies_available': row[6],
-            'price': row[7],
-            'status': row[8],
-            'added_on': row[9]
+                'name': row[1],
+                'publisher': row[2],
+                'book_id': row[3],
+                'category': row[4],
+                'author': row[5],
+                'copies_available': row[6],
+                'price': row[7],
+                'status': row[8],
+                'added_on': row[9]
             }
             books.append(book)
 
@@ -674,16 +675,16 @@ def reports():
         borrrowed = []
         for row in result:
             borrow = {
-            'user_id': row[0],
-            'book_id': row[1],
-            'borrow_date': row[2],
-            'return_date': row[3],
-            'book_name': row[4],
-            'publisher': row[5],
-            'category': row[6],
-            'author': row[7],
-            'fullname': row[8]
-        }
+                'user_id': row[0],
+                'book_id': row[1],
+                'borrow_date': row[2],
+                'return_date': row[3],
+                'book_name': row[4],
+                'publisher': row[5],
+                'category': row[6],
+                'author': row[7],
+                'fullname': row[8]
+            }
             borrrowed.append(borrow)
 
         # fourth query to get the books_returned_count
@@ -692,22 +693,22 @@ def reports():
         books_returned_count = cursor.fetchone()[0]
 
         cursor.execute(
-        "SELECT ub.user_id, ub.book_id, ub.borrow_date, ub.return_date, ub.submitted_date, b.name, b.publisher, b.category, b.author, u.fullname FROM user_books ub JOIN books b ON ub.book_id=b.book_id JOIN users u ON ub.user_id=u.id WHERE ub.submitted_date IS NOT NULL AND ub.borrow_date BETWEEN %s AND %s", (from_date, to_date))
+            "SELECT ub.user_id, ub.book_id, ub.borrow_date, ub.return_date, ub.submitted_date, b.name, b.publisher, b.category, b.author, u.fullname FROM user_books ub JOIN books b ON ub.book_id=b.book_id JOIN users u ON ub.user_id=u.id WHERE ub.submitted_date IS NOT NULL AND ub.borrow_date BETWEEN %s AND %s", (from_date, to_date))
         result = cursor.fetchall()
         returned = []
         for row in result:
             borrow = {
-            'user_id': row[0],
-            'book_id': row[1],
-            'borrow_date': row[2],
-            'return_date': row[3],
-            'submitted_date': row[4],
-            'book_name': row[5],
-            'publisher': row[6],
-            'category': row[7],
-            'author': row[8],
-            'fullname': row[9]
-        }
+                'user_id': row[0],
+                'book_id': row[1],
+                'borrow_date': row[2],
+                'return_date': row[3],
+                'submitted_date': row[4],
+                'book_name': row[5],
+                'publisher': row[6],
+                'category': row[7],
+                'author': row[8],
+                'fullname': row[9]
+            }
         returned.append(borrow)
 
         # fifth query to get the copies_count
@@ -778,7 +779,7 @@ def reports():
             'books_returned_count': books_returned_count,
             'copies_count': copies_count,
             'activity_count': activity_count,
-            'activities' : users_activity,
+            'activities': users_activity,
             'books': books,
             'users': users,
             'returned': returned,
@@ -793,7 +794,7 @@ def reports():
 def users_activity():
     if 'admin' not in session:
         return redirect(url_for('admin'))
-    cursor = mysql.connection.cursor()
+    cursor = conn.cursor()
     # query to get the user details
     query = "SELECT * FROM activity"
     cursor.execute(query)
