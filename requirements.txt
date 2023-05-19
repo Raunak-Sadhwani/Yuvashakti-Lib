@@ -1,4 +1,5 @@
 pip>=23.1.2
+mysqlclient==2.1.1
 flask_mysqldb
 python-dotenv
 flask_mail
